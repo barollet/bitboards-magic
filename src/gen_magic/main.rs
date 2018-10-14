@@ -1,26 +1,15 @@
 extern crate rand;
+extern crate find_folder;
+extern crate rayon;
 
-static B_BITS: [u8; 64] = [
-  6, 5, 5, 5, 5, 5, 5, 6,
-  5, 5, 5, 5, 5, 5, 5, 5,
-  5, 5, 7, 7, 7, 7, 5, 5,
-  5, 5, 7, 9, 9, 7, 5, 5,
-  5, 5, 7, 9, 9, 7, 5, 5,
-  5, 5, 7, 7, 7, 7, 5, 5,
-  5, 5, 5, 5, 5, 5, 5, 5,
-  6, 5, 5, 5, 5, 5, 5, 6
-];
+use rayon::prelude::*;
 
-static R_BITS: [u8; 64] = [
-  12, 11, 11, 11, 11, 11, 11, 12,
-  11, 10, 10, 10, 10, 10, 10, 11,
-  11, 10, 10, 10, 10, 10, 10, 11,
-  11, 10, 10, 10, 10, 10, 10, 11,
-  11, 10, 10, 10, 10, 10, 10, 11,
-  11, 10, 10, 10, 10, 10, 10, 11,
-  11, 10, 10, 10, 10, 10, 10, 11,
-  12, 11, 11, 11, 11, 11, 11, 12
-];
+use find_folder::Search;
+
+use std::io::Write;
+use std::env;
+use std::path::PathBuf;
+use std::fs::{OpenOptions, File, DirBuilder};
 
 fn gen_magic() -> u64 {
     let mut magic = u64::max_value();
@@ -92,11 +81,17 @@ fn index_to_u64(index: usize, bits: u32, mut mask: u64) -> u64 {
     result
 }
 
-fn get_offset(key: u64, magic: u64, shift: u8) -> usize {
+#[allow(dead_code)]
+fn get_fixed_offset(key: u64, magic: u64) -> usize {
+    (key.overflowing_mul(magic).0 >> (64 - 12)) as usize
+}
+
+#[allow(dead_code)]
+fn get_offset(key: u64, magic: u64, shift: u32) -> usize {
     (key.overflowing_mul(magic).0 >> (64 - shift)) as usize
 }
 
-fn find_magic(square: u8, bishop: bool) -> u64 {
+fn write_magic_to_file(file: &mut File, square: u8, bishop: bool) -> Result<u64, String> {
 
     let mut keys: [u64; 4096] = [0; 4096];
     let mut attacks: [u64; 4096] = [0; 4096];
@@ -110,12 +105,6 @@ fn find_magic(square: u8, bishop: bool) -> u64 {
 
     let n = mask.count_ones();
 
-    let m = if bishop {
-        B_BITS[square as usize]
-    } else {
-        R_BITS[square as usize]
-    };
-
     for i in 0..(1<<n) {
         keys[i] = index_to_u64(i, n, mask) | !mask;
         attacks[i] = if bishop {
@@ -126,7 +115,7 @@ fn find_magic(square: u8, bishop: bool) -> u64 {
     }
 
     // Testing 100 000 000 magic factors
-    for _ in 0..100_000_000 {
+    for _ in 0..100_000_000{
         let magic = gen_magic();
         if (mask.overflowing_mul(magic).0 & 0xFF00000000000000).count_ones() < 6 {
             continue;
@@ -139,7 +128,8 @@ fn find_magic(square: u8, bishop: bool) -> u64 {
         let mut max_j = 0;
         let mut min_j = 4096;
         for i in 0..(1 << n) {
-            let j = get_offset(keys[i], magic, m);
+            //let j = get_offset(keys[i], magic, n);
+            let j = get_fixed_offset(keys[i], magic);
             max_j = std::cmp::max(j, max_j);
             min_j = std::cmp::min(j, min_j);
             if used[j] == 0 {
@@ -150,29 +140,108 @@ fn find_magic(square: u8, bishop: bool) -> u64 {
             }
         }
         if !fail {
-            println!("{} {} {} {}", min_j, max_j, max_j.next_power_of_two().trailing_zeros(), magic);
-            return magic;
+            file.write(format!("{} {} {} {}\n", min_j, max_j, max_j-min_j, magic).as_bytes()).is_ok();
+            return Ok(magic);
         }
     }
 
-    println!("=== Failed ===");
-
-    0
+    Err(format!("=== Failed === for {} on {}",
+                if bishop {"bishop"} else {"rook"},
+                get_square_name(square)))
 }
 
 fn main() {
 
-    println!("bishop");
-    for square in 0..64 {
-        println!("square {}", square);
-        find_magic(square, true);
+    // Reading arguments
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 3 {
+        eprintln!("Too many arguments.");
+        print_help();
+        std::process::exit(1);
     }
 
-    println!("rook");
-    for square in 0..64 {
-        println!("square {}", square);
-        find_magic(square, false);
+    let magic_size = match args[1].parse::<u64>() {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("{}", e);
+            print_help();
+            std::process::exit(1)
+        }
+    };
+
+    // Creating the magic folder if it doesn't exist
+    let magic_path = match Search::Parents(3).for_folder("magic") {
+        Ok(path) => path,
+        Err(_) => {
+            println!("Created magic folder in the current directory");
+            DirBuilder::new().create("magic").unwrap();
+            Search::Parents(3).for_folder("magic").unwrap()
+        }
+    };
+
+    if args.len() == 2 {
+        // Searching magic for every square and type
+
+        // Bishop magic
+        let vec: Vec<u8> = (0..64).collect();
+        vec.par_iter().for_each(|square| {
+            let mut f = load_file_from_type_square(*square, &magic_path, true);
+            for _ in 0..magic_size {
+                //write_magic_to_file(&mut f, *square, true).is_ok();
+                write_magic_to_file(&mut f, *square, true).is_ok();
+            }
+            println!("bishop {} done", get_square_name(*square));
+        });
+
+        // Rook magic
+        vec.par_iter().for_each(|square| {
+            let mut f = load_file_from_type_square(*square, &magic_path, false);
+            for _ in 0..magic_size {
+                write_magic_to_file(&mut f, *square, false).is_ok();
+            }
+            println!("rook {} done", get_square_name(*square));
+        });
+
+    } else {
+        println!("Not implemented yet");
     }
+}
+
+fn load_file_from_type_square(square: u8, path: &PathBuf, bishop: bool) -> File {
+
+    let mut name = String::with_capacity(4);
+    name.push(if bishop {'b'} else {'r'});
+    name.push('_');
+    push_square_name(&mut name, square);
+
+    let mut path = path.join(name);
+    path.set_extension("csv");
+
+    let file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open(path)
+        .unwrap();
+
+    file
+}
+
+fn push_square_name(name: &mut String, square: u8) {
+    name.push((('a' as u8) + (square % 8)) as char);
+    name.push(std::char::from_digit(square as u32 / 8 + 1, 10).unwrap());
+}
+
+fn get_square_name(square: u8) -> String {
+    let mut result = String::with_capacity(2);
+    push_square_name(&mut result, square);
+    result
+}
+
+fn print_help() {
+    eprintln!("Usage: ./gen_magic number_of_magics (specific square)");
+    eprintln!("Examples: ./gen_magic 1000");
+    eprintln!("          ./gen_magic 1000 a2");
 }
 
 #[allow(dead_code)]
