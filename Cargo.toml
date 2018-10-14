@@ -5,3 +5,13 @@ authors = ["Theo Barollet <theo.barollet@ensimag.fr>"]
 
 [dependencies]
 rand = "0.5.5"
+find_folder = "*"
+rayon = "*"
+
+[[bin]]
+name = "gen_magic"
+path = "src/gen_magic/main.rs"
+
+[[bin]]
+name = "magic_management"
+path = "src/magic_management/main.rs"
