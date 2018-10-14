@@ -117,7 +117,7 @@ fn find_magic(square: u8, bishop: bool) -> u64 {
     };
 
     for i in 0..(1<<n) {
-        keys[i] = index_to_u64(i, n, mask);
+        keys[i] = index_to_u64(i, n, mask) | !mask;
         attacks[i] = if bishop {
             get_bishop_attack(square, keys[i])
         } else {
@@ -136,8 +136,12 @@ fn find_magic(square: u8, bishop: bool) -> u64 {
         }
 
         let mut fail = false;
+        let mut max_j = 0;
+        let mut min_j = 4096;
         for i in 0..(1 << n) {
             let j = get_offset(keys[i], magic, m);
+            max_j = std::cmp::max(j, max_j);
+            min_j = std::cmp::min(j, min_j);
             if used[j] == 0 {
                 used[j] = attacks[i];
             } else if used[j] != attacks[i] {
@@ -146,7 +150,7 @@ fn find_magic(square: u8, bishop: bool) -> u64 {
             }
         }
         if !fail {
-            println!("{}", magic);
+            println!("{} {} {} {}", min_j, max_j, max_j.next_power_of_two().trailing_zeros(), magic);
             return magic;
         }
     }
@@ -171,6 +175,7 @@ fn main() {
     }
 }
 
+#[allow(dead_code)]
 fn print_bitboard_mask(u: u64) {
     for i in (0..8).rev() {
         let line: u8 = ((u >> (8*i)) & 0xff) as u8;
