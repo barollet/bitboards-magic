@@ -139,6 +139,11 @@ fn write_magic_to_file(file: &mut File, square: u8, bishop: bool) -> Result<u64,
                 break;
             }
         }
+        /*
+        if max_j - min_j > 1000 {
+            continue
+        }
+        */
         if !fail {
             file.write(format!("{} {} {} {}\n", min_j, max_j, max_j-min_j, magic).as_bytes()).is_ok();
             return Ok(magic);
@@ -184,14 +189,15 @@ fn main() {
 
         // Bishop magic
         let vec: Vec<u8> = (0..64).collect();
+        /*
         vec.par_iter().for_each(|square| {
             let mut f = load_file_from_type_square(*square, &magic_path, true);
             for _ in 0..magic_size {
-                //write_magic_to_file(&mut f, *square, true).is_ok();
                 write_magic_to_file(&mut f, *square, true).is_ok();
             }
             println!("bishop {} done", get_square_name(*square));
         });
+        */
 
         // Rook magic
         vec.par_iter().for_each(|square| {
@@ -203,7 +209,13 @@ fn main() {
         });
 
     } else {
-        println!("Not implemented yet");
+        let square = square_from_name(&args[2]);
+        // Hardcoded bishop magic
+        let vec: Vec<u64> = (0..magic_size).collect();
+        vec.par_iter().for_each(|_| {
+            let mut f = load_file_from_type_square(square, &magic_path, true);
+            write_magic_to_file(&mut f, square, true).is_ok();
+        });
     }
 }
 
@@ -236,6 +248,19 @@ fn get_square_name(square: u8) -> String {
     let mut result = String::with_capacity(2);
     push_square_name(&mut result, square);
     result
+}
+
+fn square_from_name(name: &str) -> u8 {
+    let mut chars = name.chars();
+    let mut square = 0;
+
+    if let Some(letter) = chars.next() {
+        square += (letter as u8) - ('a' as u8);
+    }
+    if let Some(digit) = chars.next() {
+        square += 8*((digit as u8) - ('1' as u8));
+    }
+    square
 }
 
 fn print_help() {

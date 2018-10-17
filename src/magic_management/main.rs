@@ -38,15 +38,15 @@ fn main() {
                 let mut buf_reader = BufReader::new(file);
                 buf_reader.read_to_string(&mut contents).is_ok();
 
-                let min_array_size: u32 = contents.split('\n').fold(u32::max_value(), |min, line| {
+                let (min_array_size, magic_value): (u32, u64) = contents.split('\n').fold((u32::max_value(), 0), |(min, magic), line| {
                     let vec: Vec<_> = line.split_whitespace().collect();
-                    if vec.len() > 2 {
-                        std::cmp::min(min, vec[2].parse::<u32>().unwrap())
+                    if vec.len() > 3 {
+                        (std::cmp::min(min, vec[2].parse::<u32>().unwrap()), vec[3].parse::<u64>().unwrap())
                     } else {
-                        min
+                        (min, magic)
                     }
                 });
-                println!("bishop {} done. Array size: {}", get_square_name(*square), min_array_size);
+                println!("bishop {} done. Array size: {}. Magic: {}", get_square_name(*square), min_array_size, magic_value);
             },
             Err(e) => eprintln!("Can't open file for {} on {} {}", "bishop", get_square_name(*square), e),
         }
@@ -61,15 +61,15 @@ fn main() {
                 let mut buf_reader = BufReader::new(file);
                 buf_reader.read_to_string(&mut contents).is_ok();
 
-                let min_array_size: u32 = contents.split('\n').fold(u32::max_value(), |min, line| {
+                let (min_array_size, magic_value): (u32, u64) = contents.split('\n').fold((u32::max_value(), 0), |(min, magic), line| {
                     let vec: Vec<_> = line.split_whitespace().collect();
-                    if vec.len() > 2 {
-                        std::cmp::min(min, vec[2].parse::<u32>().unwrap())
+                    if vec.len() > 3 {
+                        (std::cmp::min(min, vec[2].parse::<u32>().unwrap()), vec[3].parse::<u64>().unwrap())
                     } else {
-                        min
+                        (min, magic)
                     }
                 });
-                println!("rook {} done. Array size: {}", get_square_name(*square), min_array_size);
+                println!("rook {} done. Array size: {}. Magic: {}", get_square_name(*square), min_array_size, magic_value);
             },
             Err(e) => eprintln!("Can't open file for {} on {} {}", "rook", get_square_name(*square), e),
         }

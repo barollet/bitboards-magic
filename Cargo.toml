@@ -7,6 +7,7 @@ authors = ["Theo Barollet <theo.barollet@ensimag.fr>"]
 rand = "0.5.5"
 find_folder = "*"
 rayon = "*"
+array-init = "*"
 
 [[bin]]
 name = "gen_magic"
@@ -15,3 +16,7 @@ path = "src/gen_magic/main.rs"
 [[bin]]
 name = "magic_management"
 path = "src/magic_management/main.rs"
+
+[[bin]]
+name = "table_creation"
+path = "src/table_creation/main.rs"
