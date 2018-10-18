@@ -16,22 +16,6 @@ struct MagicEntry {
     magic_factor: u64,
     min: u32,
     width: u32,
-    holes: Vec<Hole>,
-}
-
-#[derive(Debug)]
-struct Hole {
-    size: usize,
-    position: usize,
-}
-
-impl Hole {
-    fn new(size: usize, position: usize) -> Hole {
-        Hole {
-            size,
-            position,
-        }
-    }
 }
 
 impl MagicEntry {
@@ -40,113 +24,18 @@ impl MagicEntry {
             magic_factor: line[3].parse::<u64>().unwrap(),
             min: match line[0].parse::<u32>() {
                 Ok(n) => n,
-                Err(e) => 12, // mdr
+                Err(_e) => 12, // mdr
             },
             width: line[2].parse::<u32>().unwrap(),
-            holes: Vec::new(),
         }
     }
 
-    fn similarity(&self, other: &MagicEntry) -> f64 {
-        0
+    fn shared_size(&self, other: &MagicEntry) -> u32 {
+        let max = std::cmp::max(self.min + self.width, other.min + other.width);        
+        let min = std::cmp::min(self.min, other.min);
+
+        max - min
     }
-
-    fn find_holes(&mut self, bishop: bool, square: u8) {
-        
-        let mask = if bishop {
-            get_bishop_mask(square)
-        } else {
-            get_rook_mask(square)
-        };
-
-        let n = mask.count_ones();
-        let mut offsets: [bool; 4096] = [false; 4096];
-
-        // finding offsets
-        for i in 0..1<<n {
-            let key = index_to_u64(i, n, mask) | !mask;
-            let offset = get_fixed_offset(key, self.magic_factor);
-
-            offsets[offset] = true;
-        }
-
-        // finding holes
-        let mut i = 0;
-
-        while i < 4096 {
-            let hole_start = i;
-            while i < 4096 && !offsets[i] {
-                i += 1;
-            }
-            if i - hole_start > 50 {
-                self.holes.push(Hole::new(i - hole_start, i));
-            }
-            while i < 4096 && offsets[i] {
-                i += 1;
-            }
-        }
-    }
-}
-
-fn direction_blockers_mask<F, G>(result: &mut u64, blockers: u64, mut kl: (u8, u8), update: F, check_bounds: G) 
-    where F: Fn((u8, u8)) -> (u8, u8),
-          G: Fn((u8, u8)) -> bool,
-{
-    while check_bounds(kl) {
-        kl = update(kl);
-        *result |= 1 << (8*kl.0 + kl.1);
-        if blockers & 1 << (8*kl.0 + kl.1) != 0 {
-            break
-        }
-    }
-}
-
-fn get_bishop_mask(square: u8) -> u64 {
-    get_bishop_attack(square, 0)
-}
-
-fn get_bishop_attack(square: u8, blockers: u64) -> u64 {
-    let mut result: u64 = 0;
-    let ij = (square / 8, square % 8);
-
-    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k+1, l+1), |(k, l)| k < 6 && l < 6);
-    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k+1, l-1), |(k, l)| k < 6 && l > 1);
-    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k-1, l+1), |(k, l)| k > 1 && l < 6);
-    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k-1, l-1), |(k, l)| k > 1 && l > 1);
-
-    result
-}
-
-fn get_rook_mask(square: u8) -> u64 {
-    get_rook_attack(square, 0)
-}
-
-fn get_rook_attack(square: u8, blockers: u64) -> u64 {
-    let mut result: u64 = 0;
-    let ij = (square / 8, square % 8);
-
-    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k+1, l), |(k, _l)| k < 6);
-    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k-1, l), |(k, _l)| k > 1);
-    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k, l+1), |(_k, l)| l < 6);
-    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k, l-1), |(_k, l)| l > 1);
-
-    result
-}
-fn pop_1st_bit(mask: &mut u64) -> u32 {
-    let j = mask.trailing_zeros();
-    *mask &= *mask -1;
-    j
-}
-
-fn index_to_u64(index: usize, bits: u32, mut mask: u64) -> u64 {
-    let mut result = 0;
-    for i in 0..bits {
-        let j = pop_1st_bit(&mut mask);
-        if index & (1 << i) != 0 {
-            result |= 1u64 << j;
-        }
-    }
-    result
 }
 
 #[allow(dead_code)]
@@ -181,22 +70,45 @@ fn main() {
 
     println!("Table loaded, start generating the final table");
 
-    /*
-    for square in 0..64 {
-        for entry in rook_tables[square].iter_mut() {
-            entry.find_holes(false, square as u8);
+    let mut predicted_size = 0;
+
+    for square in (0..64).step_by(2) {
+        if (square / 8) % 2 != 0 {
+            continue;
         }
-        for entry in bishop_tables[square].iter_mut() {
-            entry.find_holes(true, square as u8);
+        let mut min_shared_size = 4096;
+        for magic_entry in &rook_tables[square as usize] {
+            for other_entry in &rook_tables[(square+9 as usize)] {
+                let shared_size = magic_entry.shared_size(&other_entry);
+                if shared_size < min_shared_size {
+                    min_shared_size = shared_size;
+                }
+            }
         }
-        println!("{} done", square);
+        println!("{} {}", square, min_shared_size);
+        predicted_size += min_shared_size;
     }
-    */
 
-    println!("Holes found");
+    for square in (1..64).step_by(2) {
+        if (square / 8) % 2 != 0 {
+            continue;
+        }
+        let mut min_shared_size = 4096;
+        for magic_entry in &rook_tables[square as usize] {
+            for other_entry in &rook_tables[(square+7 as usize)] {
+                let shared_size = magic_entry.shared_size(&other_entry);
+                if shared_size < min_shared_size {
+                    min_shared_size = shared_size;
+                }
+            }
+        }
+        println!("{} {}", square, min_shared_size);
+        predicted_size += min_shared_size;
+    }
 
-    println!("{:?}", rook_tables[0][0]);
+    println!("Shared size found");
 
+    println!("Predicted offset {}, size {}", predicted_size, predicted_size*8);
 }
 
 fn load_file_content_into_table(table: &mut [Vec<MagicEntry>; 64], path: &PathBuf, bishop: bool) {
