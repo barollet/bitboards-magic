@@ -6,10 +6,10 @@ use rayon::prelude::*;
 
 use find_folder::Search;
 
-use std::io::{Read, BufReader};
 use std::env;
-use std::path::PathBuf;
 use std::fs::File;
+use std::io::{BufReader, Read};
+use std::path::PathBuf;
 
 #[derive(Debug)]
 struct MagicEntry {
@@ -19,7 +19,7 @@ struct MagicEntry {
 }
 
 impl MagicEntry {
-    fn new_from_line(line: Vec<&str>) -> MagicEntry {
+    fn new_from_line(line: &[&str]) -> MagicEntry {
         MagicEntry {
             magic_factor: line[3].parse::<u64>().unwrap(),
             min: match line[0].parse::<u32>() {
@@ -31,7 +31,7 @@ impl MagicEntry {
     }
 
     fn shared_size(&self, other: &MagicEntry) -> u32 {
-        let max = std::cmp::max(self.min + self.width, other.min + other.width);        
+        let max = std::cmp::max(self.min + self.width, other.min + other.width);
         let min = std::cmp::min(self.min, other.min);
 
         max - min
@@ -44,7 +44,6 @@ fn get_fixed_offset(key: u64, magic: u64) -> usize {
 }
 
 fn main() {
-
     // Reading arguments
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
@@ -77,15 +76,25 @@ fn main() {
             continue;
         }
         let mut min_shared_size = 4096;
+        let mut start_offset = 0;
+        let mut magic1 = 0;
+        let mut magic2 = 0;
         for magic_entry in &rook_tables[square as usize] {
-            for other_entry in &rook_tables[(square+9 as usize)] {
+            for other_entry in &rook_tables[(square + 9 as usize)] {
                 let shared_size = magic_entry.shared_size(&other_entry);
                 if shared_size < min_shared_size {
                     min_shared_size = shared_size;
+
+                    start_offset = std::cmp::min(magic_entry.min, other_entry.min);
+                    magic1 = magic_entry.magic_factor;
+                    magic2 = other_entry.magic_factor;
                 }
             }
         }
-        println!("{} {}", square, min_shared_size);
+        println!(
+            "{} size: {} start: {} magic1: {} magic2: {}",
+            square, min_shared_size, start_offset, magic1, magic2
+        );
         predicted_size += min_shared_size;
     }
 
@@ -94,26 +103,40 @@ fn main() {
             continue;
         }
         let mut min_shared_size = 4096;
+        let mut start_offset = 0;
+        let mut magic1 = 0;
+        let mut magic2 = 0;
         for magic_entry in &rook_tables[square as usize] {
-            for other_entry in &rook_tables[(square+7 as usize)] {
+            for other_entry in &rook_tables[(square + 7 as usize)] {
                 let shared_size = magic_entry.shared_size(&other_entry);
                 if shared_size < min_shared_size {
                     min_shared_size = shared_size;
+
+                    start_offset = std::cmp::min(magic_entry.min, other_entry.min);
+                    magic1 = magic_entry.magic_factor;
+                    magic2 = other_entry.magic_factor;
                 }
             }
         }
-        println!("{} {}", square, min_shared_size);
+        println!(
+            "{} size: {} start: {} magic1: {} magic2: {}",
+            square, min_shared_size, start_offset, magic1, magic2
+        );
         predicted_size += min_shared_size;
     }
 
     println!("Shared size found");
 
-    println!("Predicted offset {}, size {}", predicted_size, predicted_size*8);
+    println!(
+        "Predicted offset {}, size {}",
+        predicted_size,
+        predicted_size * 8
+    );
 }
 
 fn load_file_content_into_table(table: &mut [Vec<MagicEntry>; 64], path: &PathBuf, bishop: bool) {
-    table.par_iter_mut().enumerate().for_each(|(square, magic_vec)| {
-        match load_file_from_type_square(square as u8, path, bishop) {
+    table.par_iter_mut().enumerate().for_each(
+        |(square, magic_vec)| match load_file_from_type_square(square as u8, path, bishop) {
             Ok(file) => {
                 let mut contents = String::new();
                 let mut buf_reader = BufReader::new(file);
@@ -122,19 +145,27 @@ fn load_file_content_into_table(table: &mut [Vec<MagicEntry>; 64], path: &PathBu
                 for line in contents.split('\n') {
                     let line_vec: Vec<_> = line.split_whitespace().collect();
                     if line_vec.len() > 3 {
-                        magic_vec.push(MagicEntry::new_from_line(line_vec));
+                        magic_vec.push(MagicEntry::new_from_line(&line_vec));
                     }
                 }
-            },
-            Err(e) => eprintln!("Can't open file for {} on {} {}", if bishop {"bishop"} else {"rook"}, get_square_name(square as u8), e),
-        }
-    });
+            }
+            Err(e) => eprintln!(
+                "Can't open file for {} on {} {}",
+                if bishop { "bishop" } else { "rook" },
+                get_square_name(square as u8),
+                e
+            ),
+        },
+    );
 }
 
-fn load_file_from_type_square(square: u8, path: &PathBuf, bishop: bool) -> Result<File, std::io::Error> {
-
+fn load_file_from_type_square(
+    square: u8,
+    path: &PathBuf,
+    bishop: bool,
+) -> Result<File, std::io::Error> {
     let mut name = String::with_capacity(4);
-    name.push(if bishop {'b'} else {'r'});
+    name.push(if bishop { 'b' } else { 'r' });
     name.push('_');
     push_square_name(&mut name, square);
 
@@ -145,8 +176,8 @@ fn load_file_from_type_square(square: u8, path: &PathBuf, bishop: bool) -> Resul
 }
 
 fn push_square_name(name: &mut String, square: u8) {
-    name.push((('a' as u8) + (square % 8)) as char);
-    name.push(std::char::from_digit(square as u32 / 8 + 1, 10).unwrap());
+    name.push((b'a' + (square % 8)) as char);
+    name.push(std::char::from_digit(u32::from(square) / 8 + 1, 10).unwrap());
 }
 
 fn get_square_name(square: u8) -> String {
