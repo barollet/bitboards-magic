@@ -1,8 +1,10 @@
 extern crate array_init;
 extern crate find_folder;
 extern crate rayon;
+extern crate itertools;
 
 use rayon::prelude::*;
+use itertools::Itertools;
 
 use find_folder::Search;
 
@@ -11,7 +13,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct MagicEntry {
     magic_factor: u64,
     min: u32,
@@ -71,6 +73,7 @@ fn main() {
 
     let mut predicted_size = 0;
 
+    // Rook tables
     for square in (0..64).step_by(2) {
         if (square / 8) % 2 != 0 {
             continue;
@@ -123,6 +126,39 @@ fn main() {
             square, min_shared_size, start_offset, magic1, magic2
         );
         predicted_size += min_shared_size;
+    }
+
+    // Bishop tables
+    let bishop_sharing: [usize; 64] = [
+        0,  2,  4,  4,  4,  4, 12, 14,
+        0,  2,  5,  5,  5,  5, 12, 14,
+        0,  2,  6,  6,  6,  6, 12, 14,
+        0,  2,  7,  7,  7,  7, 12, 14,
+        1,  3,  8,  8,  8,  8, 13, 15,
+        1,  3,  9,  9,  9,  9, 13, 15,
+        1,  3, 10, 10, 10, 10, 13, 15,
+        1,  3, 11, 11, 11, 11, 13, 15,
+    ];
+    let mut bishop_shared: [[usize; 4]; 16] = [[0; 4]; 16];
+    let mut indexes: [usize; 16] = [0; 16];
+    for square in 0..64 {
+        let sharing = bishop_sharing[square];
+        bishop_shared[sharing][indexes[usize::from(sharing)]] = square;
+        indexes[usize::from(sharing)] += 1;
+    }
+
+    println!("{:?}", bishop_shared);
+
+    let mut i = 0;
+    for squares in &bishop_shared {
+        let min = squares.into_iter().map(|sq| bishop_tables[*sq].iter()).multi_cartesian_product()
+            .min_by_key(|magic_entries|
+                        magic_entries.iter().map(|m| m.min + m.width).max().unwrap() - magic_entries.iter().map(|m| m.min).min().unwrap()
+                        ).unwrap();
+        let start = min.iter().map(|m| m.min).min().unwrap();
+        let size = min.iter().map(|m| m.min + m.width).max().unwrap() - min.iter().map(|m| m.min).min().unwrap();
+        println!("{} {:?} {:?} {:?} {} {} {} {}", i, squares, start, size, min[0].magic_factor, min[1].magic_factor, min[2].magic_factor, min[3].magic_factor);
+        i += 1;
     }
 
     println!("Shared size found");
