@@ -33,10 +33,10 @@ fn direction_blockers_mask<F, G>(result: &mut u64, blockers: u64, mut kl: (u8, u
 }
 
 fn get_bishop_mask(square: u8) -> u64 {
-    get_bishop_attack(square, 0)
+    get_bishop_key(square, 0)
 }
 
-fn get_bishop_attack(square: u8, blockers: u64) -> u64 {
+fn get_bishop_key(square: u8, blockers: u64) -> u64 {
     let mut result: u64 = 0;
     let ij = (square / 8, square % 8);
 
@@ -48,11 +48,23 @@ fn get_bishop_attack(square: u8, blockers: u64) -> u64 {
     result
 }
 
-fn get_rook_mask(square: u8) -> u64 {
-    get_rook_attack(square, 0)
+fn get_bishop_attack(square: u8, blockers: u64) -> u64 {
+    let mut result: u64 = 0;
+    let ij = (square / 8, square % 8);
+
+    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k+1, l+1), |(k, l)| k < 7 && l < 7);
+    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k+1, l-1), |(k, l)| k < 7 && l > 0);
+    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k-1, l+1), |(k, l)| k > 0 && l < 7);
+    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k-1, l-1), |(k, l)| k > 0 && l > 0);
+
+    result
 }
 
-fn get_rook_attack(square: u8, blockers: u64) -> u64 {
+fn get_rook_mask(square: u8) -> u64 {
+    get_rook_key(square, 0)
+}
+
+fn get_rook_key(square: u8, blockers: u64) -> u64 {
     let mut result: u64 = 0;
     let ij = (square / 8, square % 8);
 
@@ -60,6 +72,18 @@ fn get_rook_attack(square: u8, blockers: u64) -> u64 {
     direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k-1, l), |(k, _l)| k > 1);
     direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k, l+1), |(_k, l)| l < 6);
     direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k, l-1), |(_k, l)| l > 1);
+
+    result
+}
+
+fn get_rook_attack(square: u8, blockers: u64) -> u64 {
+    let mut result: u64 = 0;
+    let ij = (square / 8, square % 8);
+
+    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k+1, l), |(k, _l)| k < 7);
+    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k-1, l), |(k, _l)| k > 0);
+    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k, l+1), |(_k, l)| l < 7);
+    direction_blockers_mask(&mut result, blockers, ij, |(k, l)| (k, l-1), |(_k, l)| l > 0);
 
     result
 }
@@ -189,7 +213,6 @@ fn main() {
 
         // Bishop magic
         let vec: Vec<u8> = (0..64).collect();
-        /*
         vec.par_iter().for_each(|square| {
             let mut f = load_file_from_type_square(*square, &magic_path, true);
             for _ in 0..magic_size {
@@ -197,7 +220,6 @@ fn main() {
             }
             println!("bishop {} done", get_square_name(*square));
         });
-        */
 
         // Rook magic
         vec.par_iter().for_each(|square| {
@@ -277,6 +299,6 @@ fn print_bitboard_mask(u: u64) {
             print!("{}", (line >> j) & 0x1);
         }
         println!("");
-    } 
+    }
     println!("");
 }
