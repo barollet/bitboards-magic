@@ -164,7 +164,7 @@ fn write_magic_to_file(file: &mut File, square: u8, bishop: bool) -> Result<u64,
             }
         }
         /*
-        if max_j - min_j > 1000 {
+        if max_j - min_j > 2000 {
             continue
         }
         */
@@ -213,6 +213,7 @@ fn main() {
 
         // Bishop magic
         let vec: Vec<u8> = (0..64).collect();
+        /*
         vec.par_iter().for_each(|square| {
             let mut f = load_file_from_type_square(*square, &magic_path, true);
             for _ in 0..magic_size {
@@ -220,6 +221,7 @@ fn main() {
             }
             println!("bishop {} done", get_square_name(*square));
         });
+        */
 
         // Rook magic
         vec.par_iter().for_each(|square| {
